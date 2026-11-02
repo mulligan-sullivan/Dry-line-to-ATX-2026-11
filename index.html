@@ -204,8 +204,10 @@ async function loadAll() {
     document.getElementById("status").textContent = stat;
 
     // --- progress since fixed start ---
-    var adv = ZERO_DIST - dist;
-    document.getElementById("prog").textContent = (adv >= 0 ? "" : "+") + Math.round(adv) + " mi toward Austin";
+    var adv = ZERO_DIST - dist;   // positive = edge has advanced toward Austin since project start
+    document.getElementById("prog").textContent = adv >= 0
+      ? Math.round(adv) + " mi toward Austin"
+      : Math.round(-adv) + " mi away from Austin";
 
     // --- bar ---
     var mpct = (edge === null ? 0 : edge.cum / TOTAL * 100);
