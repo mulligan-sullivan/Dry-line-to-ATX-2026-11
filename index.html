@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comfort edge — cold front to Austin</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         max-width: 760px; margin: 24px auto; padding: 0 16px; line-height: 1.45; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  .meta { font-size: 12px; color: #888; margin-bottom: 20px; }
+  .hero { display: flex; align-items: baseline; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+  .hero .num { font-size: 44px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .hero .lbl { font-size: 14px; color: #555; }
+  .stats { display: flex; gap: 28px; flex-wrap: wrap; margin-bottom: 26px; }
+  .stat .k { font-size: 12px; color: #888; margin-bottom: 2px; }
+  .stat .v { font-size: 16px; font-weight: 600; }
+  .stat .s { font-size: 12px; color: #888; }
+  #bar { position: relative; height: 92px; margin: 26px 4px 0; }
+  #track { position: absolute; top: 22px; left: 0; right: 0; height: 4px; border-radius: 2px; background: rgba(128,128,128,.25); }
+  #fill { position: absolute; top: 22px; left: 0; height: 4px; border-radius: 2px; background: rgba(46,110,180,.5); }
+  #marker { position: absolute; top: 12px; width: 2px; height: 26px; background: #111; transform: translateX(-1px); }
+  #markerLabel { position: absolute; top: -6px; transform: translateX(-50%); font-size: 11px; color: #555; white-space: nowrap; }
+  .dot { position: absolute; top: 21px; width: 6px; height: 6px; border-radius: 3px; background: #999; transform: translateX(-50%); }
+  .dot.aus { top: 19px; width: 10px; height: 10px; border-radius: 5px; background: #111; }
+  .tickA { position: absolute; top: 28px; width: 1px; height: 7px; background: #bbb; transform: translateX(-50%); }
+  .tickB { position: absolute; top: 28px; width: 1px; height: 25px; background: #bbb; transform: translateX(-50%); }
+  .lab { position: absolute; font-size: 11px; color: #888; white-space: nowrap; transform: translateX(-50%); }
+  .lab.first { transform: translateX(0); }
+  .lab.last { transform: translateX(-100%); }
+  .note { margin-top: 14px; font-size: 12px; color: #888; line-height: 1.55; }
+  button { font: inherit; font-size: 13px; padding: 6px 14px; border: 1px solid #bbb; border-radius: 6px; background: transparent; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  #status { font-size: 12px; color: #a33; margin-left: 10px; }
+</style>
+</head>
+<body>
+  <h1>Comfort edge on the cold front's path to Austin</h1>
+  <div class="meta" id="meta">loading…</div>
+
+  <div class="hero">
+    <span class="num" id="dist">—</span>
+    <span class="lbl" id="distLbl">from Austin, measured along the front's own path (1,078 mi Colorado Springs to Austin)</span>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="k">Nearest city</div>
+      <div class="v" id="nearCity">—</div>
+      <div class="s" id="nearSub">—</div>
+    </div>
+    <div class="stat">
+      <div class="k">ETA at Austin (forecast method)</div>
+      <div class="v" id="eta">—</div>
+      <div class="s">first model hour at or below 55 F dew point, temp 60s-70s</div>
+    </div>
+    <div class="stat">
+      <div class="k">Progress since project start</div>
+      <div class="v" id="prog">—</div>
+      <div class="s">start fixed at the Nov 2, 7:15 AM CST edge position, 702 mi from Austin</div>
+    </div>
+  </div>
+
+  <div id="bar">
+    <div id="track"></div>
+    <div id="fill"></div>
+    <div id="marker"></div>
+    <div id="markerLabel">comfort edge (55 F dew point)</div>
+  </div>
+
+  <div class="note">
+    The edge is where the dew point crosses 55 F, interpolated between stations (splitting the
+    difference between the two stations it falls between). The path runs from Colorado Springs,
+    the head of the dry sector behind the front, down the high plains to Austin. Your strict comfort
+    test (dew point at or below 55 F and temperature 60-79 F) is reported in the status line.
+    Data: Open-Meteo, current conditions plus hourly forecast for Austin. Auto-refreshes every
+    10 minutes.
+    <span style="display:inline-block; margin-top:8px;"><button id="refresh" onclick="loadAll()">Refresh now</button><span id="status"></span></span>
+  </div>
+
+<script>
+// name, lat, lon, cumulative path miles from Colorado Springs (great-circle legs, computed once)
+var WPS = [
+  ["Colo. Spgs", 38.83, -104.82, 0.0],
+  ["Pueblo", 38.25, -104.61, 41.7],
+  ["Walsenburg", 37.62, -104.78, 86.2],
+  ["Trinidad", 37.17, -104.51, 120.6],
+  ["Raton", 36.90, -104.44, 139.6],
+  ["Clayton", 36.45, -103.18, 216.1],
+  ["Tucumcari", 35.17, -103.72, 309.6],
+  ["Amarillo", 35.22, -101.83, 416.3],
+  ["Childress", 34.43, -100.21, 523.2],
+  ["Clinton", 35.52, -98.97, 626.2],
+  ["OKC", 35.47, -97.52, 707.8],
+  ["Ardmore", 34.17, -97.13, 800.3],
+  ["Ft Worth", 32.76, -97.33, 898.4],
+  ["Waco", 31.55, -97.15, 982.7],
+  ["Temple", 31.10, -97.34, 1015.7],
+  ["Austin", 30.27, -97.74, 1077.8]
+];
+var TOTAL = 1077.8;
+var ZERO_DIST = 701.9;  // edge distance from Austin at project start, Nov 2 7:15 AM CST
+
+// which cities get labels on the bar, and which label row (A upper, B lower)
+var LABELS = {
+  "Colo. Spgs": "A", "Raton": "A", "Tucumcari": "A", "Amarillo": "B",
+  "Childress": "A", "OKC": "B", "Ardmore": "A", "Ft Worth": "B",
+  "Waco": "A", "Temple": "B", "Austin": "A"
+};
+
+function urlFor(wp, hourly) {
+  var u = "https://api.open-meteo.com/v1/forecast?latitude=" + wp[1] + "&longitude=" + wp[2] +
+          "&current=temperature_2m,dew_point_2m&temperature_unit=fahrenheit&timezone=America%2FChicago";
+  if (hourly) u += "&hourly=temperature_2m,dew_point_2m&forecast_days=2";
+  return u;
+}
+
+function computeEdge(temps, dps) {
+  // scan from Austin (last) toward the northwest start
+  for (var i = WPS.length - 1; i > 0; i--) {
+    if (dps[i] > 55 && dps[i-1] <= 55) {
+      var f = (55 - dps[i]) / (dps[i-1] - dps[i]);      // fraction of the leg toward the NW station
+      var leg = WPS[i][3] - WPS[i-1][3];
+      var cum = WPS[i][3] - f * leg;                    // path miles from NW start
+      var t = temps[i] + f * (temps[i-1] - temps[i]);
+      return { cum: cum, temp: t };
+    }
+  }
+  if (dps[WPS.length-1] <= 55) return { cum: TOTAL, temp: temps[WPS.length-1] };
+  return null; // dry air still beyond the NW start
+}
+
+function fmtHour(iso) {
+  var d = new Date(iso);
+  return new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", weekday: "short", hour: "numeric" }).format(d) + " CST";
+}
+
+async function loadAll() {
+  var btn = document.getElementById("refresh");
+  btn.disabled = true;
+  document.getElementById("status").textContent = "";
+  try {
+    var temps = [], dps = [], times = [];
+    var fetches = WPS.map(function(wp) {
+      return fetch(urlFor(wp, false)).then(function(r) { return r.json(); });
+    });
+    fetches.push(fetch(urlFor(WPS[WPS.length-1], true)).then(function(r) { return r.json(); }));
+    var out = await Promise.all(fetches);
+
+    for (var i = 0; i < WPS.length; i++) {
+      temps.push(out[i].current.temperature_2m);
+      dps.push(out[i].current.dew_point_2m);
+      times.push(out[i].current.time);
+    }
+    var ausHourly = out[WPS.length];
+
+    // --- edge ---
+    var edge = computeEdge(temps, dps);
+    var dist, nearIdx, nearSub;
+    if (edge === null) {
+      dist = TOTAL; nearIdx = 0; nearSub = "edge beyond the NW start of the path";
+    } else {
+      dist = TOTAL - edge.cum;
+      nearIdx = 0; var best = 1e9;
+      for (var j = 0; j < WPS.length; j++) {
+        var dd = Math.abs(WPS[j][3] - edge.cum);
+        if (dd < best) { best = dd; nearIdx = j; }
+      }
+      nearSub = (WPS[nearIdx][3] >= edge.cum)
+        ? Math.round(WPS[nearIdx][3] - edge.cum) + " mi NW of the edge"
+        : Math.round(edge.cum - WPS[nearIdx][3]) + " mi SE of the edge";
+    }
+    document.getElementById("dist").textContent = Math.round(dist) + " mi";
+    document.getElementById("nearCity").textContent = WPS[nearIdx][0];
+    document.getElementById("nearSub").textContent = nearSub;
+
+    // --- ETA from Austin hourly forecast ---
+    var ht = ausHourly.hourly.time, htemp = ausHourly.hourly.temperature_2m, hdp = ausHourly.hourly.dew_point_2m;
+    var etaTxt = "none in the next 48 h";
+    for (var k = 0; k < ht.length; k++) {
+      if (hdp[k] <= 55 && htemp[k] >= 60 && htemp[k] <= 79) { etaTxt = fmtHour(ht[k]); break; }
+    }
+    document.getElementById("eta").textContent = etaTxt;
+
+    // --- strict comfort test, whole path ---
+    var comfy = [];
+    for (var m = 0; m < WPS.length; m++) {
+      if (dps[m] <= 55 && temps[m] >= 60 && temps[m] <= 79) comfy.push(WPS[m][0]);
+    }
+    var stat;
+    if (comfy.length) {
+      stat = "Strict comfort test met at: " + comfy.join(", ") + ".";
+    } else {
+      var dryCold = [], warmHumid = [];
+      for (var n = 0; n < WPS.length; n++) {
+        if (dps[n] <= 55 && temps[n] < 60) dryCold.push(WPS[n][0]);
+        if (dps[n] > 55 && temps[n] >= 60) warmHumid.push(WPS[n][0]);
+      }
+      stat = "Strict test (55 F dew point and 60-79 F) met nowhere on the path right now — " +
+             dryCold.length + " dry-but-cold station(s), " + warmHumid.length +
+             " warm-but-humid. It should appear in the dry sector as it warms after sunrise.";
+    }
+    document.getElementById("status").textContent = stat;
+
+    // --- progress since fixed start ---
+    var adv = ZERO_DIST - dist;
+    document.getElementById("prog").textContent = (adv >= 0 ? "" : "+") + Math.round(adv) + " mi toward Austin";
+
+    // --- bar ---
+    var mpct = (edge === null ? 0 : edge.cum / TOTAL * 100);
+    document.getElementById("fill").style.width = mpct + "%";
+    document.getElementById("marker").style.left = mpct + "%";
+    document.getElementById("markerLabel").style.left = mpct + "%";
+
+    var bar = document.getElementById("bar");
+    bar.querySelectorAll(".dot,.tickA,.tickB,.lab").forEach(function(el) { el.remove(); });
+    for (var q = 0; q < WPS.length; q++) {
+      var pct = WPS[q][3] / TOTAL * 100;
+      var dot = document.createElement("div");
+      dot.className = "dot" + (q === WPS.length-1 ? " aus" : "");
+      dot.style.left = pct + "%";
+      bar.appendChild(dot);
+      var row = LABELS[WPS[q][0]];
+      if (!row) continue;
+      var tick = document.createElement("div");
+      tick.className = row === "A" ? "tickA" : "tickB";
+      tick.style.left = pct + "%";
+      bar.appendChild(tick);
+      var lab = document.createElement("div");
+      lab.className = "lab" + (q === 0 ? " first" : "") + (q === WPS.length-1 ? " last" : "");
+      lab.style.left = pct + "%";
+      lab.style.top = row === "A" ? "37px" : "55px";
+      lab.textContent = WPS[q][0];
+      bar.appendChild(lab);
+    }
+
+    document.getElementById("meta").textContent =
+      "Data " + times[WPS.length-1] + " CST, Open-Meteo. Dew points along the path, Colorado Springs to Austin: " +
+      WPS.map(function(w, i) { return w[0] + " " + Math.round(dps[i]); }).join(" / ") + " F.";
+  } catch (e) {
+    document.getElementById("status").textContent = "Fetch failed: " + e.message;
+  }
+  btn.disabled = false;
+}
+
+loadAll();
+setInterval(loadAll, 600000);
+</script>
+</body>
+</html>
